@@ -85,6 +85,7 @@ class pyRBT:
   def __len__(self):
     return self.root.size
 
+  # Editing the tree voids any iterators! Do not edit the tree whilst iterating.
   def __iter__(self):
     return pyRBT.RBIterator(self,False,False)
 
@@ -92,9 +93,11 @@ class pyRBT:
   def __reversed__(self):
     return pyRBT.RBIterator(self,True,False)
 
+  # Iterator that returns paths to each node
   def paths(self,reverse=False):
     return pyRBT.RBIterator(self,reverse,True)
 
+  # Get a string representation of the tree
   def __str__(self):
     return self.root.treestr()
 
@@ -117,22 +120,22 @@ class pyRBT:
 
   # p is a path to a node path[-1]
   @staticmethod
-  def parent(path):
+  def _parent(path):
     return path[-2] if len(path) >= 2 else None
 
   @staticmethod
-  def grandparent(path):
+  def _grandparent(path):
     return path[-3] if len(path) >= 3 else None
 
   @staticmethod
-  def uncle(path):
-    gp = pyRBT.grandparent(path)
-    p = pyRBT.parent(path)
+  def _uncle(path):
+    gp = pyRBT._grandparent(path)
+    p = pyRBT._parent(path)
     if gp is None: return None
     return gp.r if p == gp.l else gp.l
 
   @staticmethod
-  def sibling(path):
+  def _sibling(path):
     if len(path) < 2: return None
     (pa,nd) = (path[-2],path[-1])
     return pa.r if pa.l == nd else pa.l
@@ -180,7 +183,7 @@ class pyRBT:
     if len(path) == 1:
       self.root = path[0]
       self.root.black = True
-    elif pyRBT.parent(path).isred():
+    elif pyRBT._parent(path).isred():
       self._insert_case3(path)
 
   def _insert_case3(self,path):
@@ -189,9 +192,9 @@ class pyRBT:
     assert len(path) > 1 and path[-2].isred()
     # Assumption: parent exists and is red
     #  => therefore grandparent also exists and is black
-    gp = pyRBT.grandparent(path)
-    pa = pyRBT.parent(path)
-    un = pyRBT.uncle(path)
+    gp = pyRBT._grandparent(path)
+    pa = pyRBT._parent(path)
+    un = pyRBT._uncle(path)
     if un is not None and un.isred():
       pa.black = True
       un.black = True
@@ -205,8 +208,8 @@ class pyRBT:
   def _insert_case4(self,path):
     # print("  tree:",self)
     # print("  _insert_case4:",','.join([str(x) for x in path]))
-    gp = pyRBT.grandparent(path)
-    pa = pyRBT.parent(path)
+    gp = pyRBT._grandparent(path)
+    pa = pyRBT._parent(path)
     nd = path.pop() # pop to rotate from parent
     if nd == pa.r and pa == gp.l:
       self._rotate_left(path)
@@ -221,8 +224,8 @@ class pyRBT:
   def _insert_case5(self,path):
     # print("  tree:",self)
     # print("  _insert_case5:",','.join([str(x) for x in path]))
-    gp = pyRBT.grandparent(path)
-    pa = pyRBT.parent(path)
+    gp = pyRBT._grandparent(path)
+    pa = pyRBT._parent(path)
     nd = path[-1]
     gp.black = False
     pa.black = True
@@ -301,7 +304,7 @@ class pyRBT:
   # assume we have a parent
   def _delete_case2(self,path):
     if len(path) < 2: return
-    (pa,nd,sb) = (path[-2],path[-1],pyRBT.sibling(path))
+    (pa,nd,sb) = (path[-2],path[-1],pyRBT._sibling(path))
     if sb.isred():
       pa.black = False
       sb.black = True
@@ -313,7 +316,7 @@ class pyRBT:
     self._delete_case3(path)
 
   def _delete_case3(self,path):
-    (pa,nd,sb) = (path[-2],path[-1],pyRBT.sibling(path))
+    (pa,nd,sb) = (path[-2],path[-1],pyRBT._sibling(path))
     if pa.isblack() and sb.isblack() and sb.l.isblack() and sb.r.isblack():
       sb.black = False
       path.pop()
@@ -322,7 +325,7 @@ class pyRBT:
       self._delete_case4(path) # node
 
   def _delete_case4(self,path):
-    (pa,nd,sb) = (path[-2],path[-1],pyRBT.sibling(path))
+    (pa,nd,sb) = (path[-2],path[-1],pyRBT._sibling(path))
     if pa.isred() and sb.isblack() and sb.l.isblack() and sb.r.isblack():
       sb.black = False
       pa.black = True
@@ -330,7 +333,7 @@ class pyRBT:
       self._delete_case5(path)
 
   def _delete_case5(self,path):
-    (pa,nd,sb) = (path[-2],path[-1],pyRBT.sibling(path))
+    (pa,nd,sb) = (path[-2],path[-1],pyRBT._sibling(path))
     if sb.isblack():
       path.pop() # pop to rotate sibling
       path.append(sb)
@@ -347,7 +350,7 @@ class pyRBT:
     self._delete_case6(path)
 
   def _delete_case6(self,path):
-    (pa,nd,sb) = (path[-2],path[-1],pyRBT.sibling(path))
+    (pa,nd,sb) = (path[-2],path[-1],pyRBT._sibling(path))
     sb.black = pa.black
     pa.black = True
     path.pop() # rotate parent
