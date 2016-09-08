@@ -7,7 +7,7 @@ Examples:
 
     import pyRBT
     
-    rbt = pyRBT()
+    rbt = pyRBT.pyRBT()
     
     # Add elements
     rbt.insert(3)
