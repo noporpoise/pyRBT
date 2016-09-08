@@ -35,6 +35,20 @@ Examples:
     # Get number of members
     print(len(rbt))                             # prints "3"
 
+It is also possible to use as a multiset (set containing duplicate values) if
+you insert using `insert(value,True)`.
+
+    import pyRBT
+    rbt = pyRBT.pyRBT()
+    rbt.insert(2)       # 2
+    rbt.insert(2)       # 2
+    rbt.insert(2,True)  # 2,2
+    rbt.insert(1,True)  # 1,2,2
+    rbt.insert(1,True)  # 1,1,2,2
+    rbt.remove(1)       # remove a '1': 1,2,2
+    rbt.remove(2)       # remove a '2': 1,2
+    print(','.join([str(v) for v in rbt])) # print "1,2"
+
 Run tests with:
 
     python2 pyRBT.py
