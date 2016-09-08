@@ -118,6 +118,21 @@ class pyRBT:
   def clear(self):
     self.root = pyRBT.leaf
 
+  # compare two Red Black Trees lexicographically
+  # [1] < [2] < [1,1] < [1,2] < [1,2,0]
+  def __cmp__(x,y):
+    if len(x) != len(y): return len(x) - len(y)
+    for (a,b) in zip(x,y):
+      if a != b: return a-b
+    return 0
+
+  def __gt__(x,y): return x.__cmp__(y)  > 0
+  def __ge__(x,y): return x.__cmp__(y) >= 0
+  def __eq__(x,y): return x.__cmp__(y) == 0
+  def __ne__(x,y): return x.__cmp__(y) != 0
+  def __le__(x,y): return x.__cmp__(y) <= 0
+  def __lt__(x,y): return x.__cmp__(y)  < 0
+
   # p is a path to a node path[-1]
   @staticmethod
   def _parent(path):
@@ -493,6 +508,31 @@ def _test_rbt(nums):
   assert len(tree) == 0
   tree.check()
 
+def _test_rbt_comparison():
+  print("Testing RBT comparison...")
+  abc = pyRBT()
+  xyz = pyRBT()
+  abc.extend([1,2,3,9])
+  xyz.extend([9,3,2,1])
+  assert abc == xyz and abc >= xyz and abc <= xyz
+  assert not (abc > xyz) and not (abc < xyz) and not (abc != xyz)
+  abc.remove(3)
+  # abc < xyz
+  assert abc < xyz and xyz > abc and abc != xyz
+  assert not (abc > xyz) and not (abc >= xyz) and not (abc == xyz)
+  assert not (xyz < abc) and not (xyz <= abc)
+  abc.clear()
+  xyz.clear()
+  # abc == xyz
+  assert abc == xyz and abc <= xyz and abc >= xyz
+  assert not (abc != xyz) and not (abc < xyz) and not (abc > xyz)
+  # abc > xyz
+  abc.insert(1)
+  assert abc > xyz and xyz < abc and abc != xyz
+  assert not (abc < xyz) and not (abc <= xyz) and not (abc == xyz)
+  assert not (xyz > abc) and not (xyz >= abc)
+
+
 def _test_red_black_tree():
   print("Testing RBT")
   tree = pyRBT()
@@ -547,6 +587,7 @@ def _test_red_black_tree():
   for v in vals:
     tree.remove(v)
     tree.check()
+  _test_rbt_comparison()
   print("Looks like the tests all passed...")
 
 if __name__ == '__main__':
