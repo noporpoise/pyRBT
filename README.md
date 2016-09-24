@@ -3,6 +3,8 @@
 Red-Black Tree (RBT) for Python2 and Python3. 
 Insertion, deletion, search and retrieval in `O(log N)` time with `O(N)` space.
 
+[![Build Status](https://travis-ci.org/noporpoise/pyRBT.svg?branch=master)](https://travis-ci.org/noporpoise/pyRBT)
+
 Examples:
 
     import pyRBT

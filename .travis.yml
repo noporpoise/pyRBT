@@ -1,4 +1,5 @@
 language: python
+sudo: false
 python:
   - "2.6"
   - "2.7"
@@ -10,5 +11,7 @@ python:
   - "nightly" # currently points to 3.6-dev
   - "pypy"
   - "pypy3"
+# command to install dependencies
+install:
 # command to run tests
 script: python pyRBT.py
