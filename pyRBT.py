@@ -17,67 +17,83 @@ from __future__ import print_function
 
 class pyRBT:
   class RBLeaf:
-    def __init__(self): self.size = 0
+    def __init__(self,parent):
+      self.size = 0
+      self.parent = parent
     def isblack(self): return True
     def isred(self): return False
     def isleaf(self): return True
     def __str__(self): return "RBLeaf"
     def __len__(self): return 0
-    def treestr(self): return "."
+    def treestr(self,showpa=False):
+      if showpa:
+        pa = str(self.parent.value) if self.parent is not None else "-1"
+        return ".["+pa+"]"
+      else: return "."
 
   class RBNode:
     def __init__(self,value,black=True):
       self.value = value
       self.black = black
       self.size = 1
-      self.l = self.r = pyRBT.leaf
+      self.l = pyRBT.RBLeaf(self)
+      self.r = pyRBT.RBLeaf(self)
+      self.parent = None
     def isblack(self): return self.black
     def isred(self): return not self.black
     def isleaf(self): return False
     def __len__(self): return self.size
     def __str__(self):
       return "RBNode("+str(self.value)+","+("black" if self.black else "red")+")"
-    def treestr(self):
+    def treestr(self,showpa=False):
+      if showpa:
+        pa = "[" + (str(self.parent.value) if self.parent is not None else "-1") + "]"
+      else: pa = ""
       col = "B" if self.black else "R"
-      return "("+self.l.treestr()+","+str(self.value)+":"+col+","+self.r.treestr()+")"
+      return "("+self.l.treestr()+","+str(self.value)+":"+col+pa+","+self.r.treestr()+")"
+    def path(self):
+      node = self
+      while node is not None:
+        yield node
+        node = node.parent
 
   class RBIterator:
-    def __init__(self,tree,reverse=False,retpaths=False):
+    def __init__(self,tree,reverse=False,retnodes=False):
       self.tree = tree
-      self.path = []
+      self.node = None
       self.fwd = not reverse
-      self.retpaths = retpaths
+      self.retnodes = retnodes
     def __iter__(self): return self
     def next(self): return self.__next__()
     def __next__(self):
-      p = self.path
-      if len(p) == 0:
+      node = self.node
+      if node is None:
         if self.tree.root.isleaf(): raise StopIteration() # empty tree
-        p.append(self.tree.root)
+        node = self.tree.root
         if self.fwd:
-          while not p[-1].l.isleaf(): p.append(p[-1].l)
+          while not node.l.isleaf(): node = node.l
         else:
-          while not p[-1].r.isleaf(): p.append(p[-1].r)
-      elif self.fwd and not p[-1].r.isleaf():
+          while not node.r.isleaf(): node = node.r
+      elif self.fwd and not node.r.isleaf():
         # Take the secondary fork (right fork when forward)
-        p.append(p[-1].r)
-        while not p[-1].l.isleaf(): p.append(p[-1].l)
-      elif not self.fwd and not p[-1].l.isleaf():
+        node = node.r
+        while not node.l.isleaf(): node = node.l
+      elif not self.fwd and not node.l.isleaf():
         # Take the secondary fork (left fork when reverse)
-        p.append(p[-1].l)
-        while not p[-1].r.isleaf(): p.append(p[-1].r)
+        node = node.l
+        while not node.r.isleaf(): node = node.r
       else:
-        # Back up the tree
-        last = p.pop() # remove last leaf
-        # find first parent node that used left node
+        # Back up the tree - find first parent node that used left node
         if self.fwd:
-          while len(p) > 0 and last == p[-1].r: last = p.pop()
+          while node.parent is not None and node is node.parent.r: node = node.parent
         else:
-          while len(p) > 0 and last == p[-1].l: last = p.pop()
-        if len(p) == 0: raise StopIteration()
-      return p if self.retpaths else p[-1].value
+          while node.parent is not None and node is node.parent.l: node = node.parent
+        if node.parent is None: raise StopIteration()
+        node = node.parent
+      self.node = node
+      return node if self.retnodes else node.value
 
-  leaf = RBLeaf()
+  leaf = RBLeaf(None)
 
   def __init__(self):
     self.root = pyRBT.leaf
@@ -93,8 +109,8 @@ class pyRBT:
   def __reversed__(self):
     return pyRBT.RBIterator(self,True,False)
 
-  # Iterator that returns paths to each node
-  def paths(self,reverse=False):
+  # Iterator that returns each node in order
+  def nodes(self,reverse=False):
     return pyRBT.RBIterator(self,reverse,True)
 
   # Get a string representation of the tree
@@ -133,317 +149,266 @@ class pyRBT:
   def __le__(x,y): return x.__cmp__(y) <= 0
   def __lt__(x,y): return x.__cmp__(y)  < 0
 
-  # p is a path to a node path[-1]
   @staticmethod
-  def _parent(path):
-    return path[-2] if len(path) >= 2 else None
+  def _grandparent(node):
+    return node.parent.parent if node.parent is not None else None
 
   @staticmethod
-  def _grandparent(path):
-    return path[-3] if len(path) >= 3 else None
-
-  @staticmethod
-  def _uncle(path):
-    gp = pyRBT._grandparent(path)
-    p = pyRBT._parent(path)
+  def _uncle(node):
+    pa = node.parent
+    if pa is None: return None
+    gp = pa.parent
     if gp is None: return None
-    return gp.r if p == gp.l else gp.l
+    return gp.r if pa == gp.l else gp.l
 
   @staticmethod
-  def _sibling(path):
-    if len(path) < 2: return None
-    (pa,nd) = (path[-2],path[-1])
-    return pa.r if pa.l == nd else pa.l
+  def _sibling(node):
+    pa = node.parent
+    if pa is None: return None
+    return pa.r if pa.l == node else pa.l
 
+  # Replace child `ch` with `newch` in parent node `pa`
   def _replace_node(self,pa,ch,newch):
     if pa is None: self.root = newch
-    elif pa.l == ch: pa.l = newch
+    elif pa.l is ch: pa.l = newch
     else: pa.r = newch
+    newch.parent = pa
 
   #
   #   pa    ->    ch
   #  /  \        /  \
-  #     ch      pa
+  # 1   ch      pa   3
   #    /  \    /  \
-  #
-  # input path to parent node, upon return path points to child (new parent)
-  def _rotate_left(self,path):
-    pa = path.pop()
-    ch = pa.r
-    (pa.r, ch.l) = (ch.l, pa)
+  #   2    3  1    2
+  # pass pa node, returns ch node (new parent)
+  def _rotate_left(self,node):
+    pa, ch = node, node.r
+    pa.r, ch.l = ch.l, pa
+    ch.parent, pa.parent, pa.r.parent = pa.parent, ch, pa
     pa.size = len(pa.l) + 1 + len(pa.r)
     ch.size = len(ch.l) + 1 + len(ch.r)
-    self._replace_node(path[-1] if len(path) > 0 else None, pa, ch)
-    path.append(ch)
+    self._replace_node(ch.parent, pa, ch)
+    return ch
 
   #
   #       pa    ->   ch
   #      /  \       /  \
-  #     ch             pa
-  #    / \             / \
-  #
-  # input path to parent node, upon return path points to child (new parent)
-  def _rotate_right(self,path):
-    pa = path.pop()
-    ch = pa.l
-    (pa.l, ch.r) = (ch.r, pa)
+  #     ch   3     1   pa
+  #    /  \           /  \
+  #   1    2         2    3
+  # pass pa node, returns ch node (new parent)
+  def _rotate_right(self,node):
+    pa,ch = node,node.l
+    pa.l, ch.r = ch.r, pa
+    ch.parent, pa.parent, pa.l.parent = pa.parent, ch, pa
     pa.size = len(pa.l) + 1 + len(pa.r)
     ch.size = len(ch.l) + 1 + len(ch.r)
-    self._replace_node(path[-1] if len(path) > 0 else None, pa, ch)
-    path.append(ch)
+    self._replace_node(ch.parent, pa, ch)
+    return ch
 
-  def _insert_case1(self,path):
-    # print("  tree:",self)
-    # print("  _insert_case1:",','.join([str(x) for x in path]))
-    if len(path) == 1:
-      self.root = path[0]
+  def _insert_case1(self,node):
+    # print("  tree:",self,"  insert_case1:",node)
+    if node.parent is None:
+      self.root = node
       self.root.black = True
-    elif pyRBT._parent(path).isred():
-      self._insert_case3(path)
+    elif node.parent.isred():
+      self._insert_case3(node)
 
-  def _insert_case3(self,path):
-    # print("  tree:",self)
-    # print("  _insert_case3:",','.join([str(x) for x in path]))
-    assert len(path) > 1 and path[-2].isred()
+  def _insert_case3(self,node):
+    # print("  tree:",self,"  insert_case3:",node)
+    assert node.parent is not None and node.parent.isred()
     # Assumption: parent exists and is red
     #  => therefore grandparent also exists and is black
-    gp = pyRBT._grandparent(path)
-    pa = pyRBT._parent(path)
-    un = pyRBT._uncle(path)
+    gp = pyRBT._grandparent(node)
+    un = pyRBT._uncle(node)
     if un is not None and un.isred():
-      pa.black = True
+      node.parent.black = True
       un.black = True
       gp.black = False
-      path.pop()
-      path.pop()
-      self._insert_case1(path) # gp is now red, deal with it
+      self._insert_case1(gp) # gp is now red, deal with it
     else:
-      self._insert_case4(path)
+      self._insert_case4(node)
 
-  def _insert_case4(self,path):
-    # print("  tree:",self)
-    # print("  _insert_case4:",','.join([str(x) for x in path]))
-    gp = pyRBT._grandparent(path)
-    pa = pyRBT._parent(path)
-    nd = path.pop() # pop to rotate from parent
-    if nd == pa.r and pa == gp.l:
-      self._rotate_left(path)
-      path.append(nd.l)
-    elif nd == pa.l and pa == gp.r:
-      self._rotate_right(path)
-      path.append(nd.r)
-    else:
-      path.append(nd)
-    self._insert_case5(path)
+  def _insert_case4(self,node):
+    # print("  tree:",self,"  insert_case4:",node)
+    gp = pyRBT._grandparent(node)
+    pa = node.parent
+    if node == pa.r and pa == gp.l:
+      self._rotate_left(pa)
+      node = pa
+    elif node == pa.l and pa == gp.r:
+      self._rotate_right(pa)
+      node = pa
+    self._insert_case5(node)
 
-  def _insert_case5(self,path):
-    # print("  tree:",self)
-    # print("  _insert_case5:",','.join([str(x) for x in path]))
-    gp = pyRBT._grandparent(path)
-    pa = pyRBT._parent(path)
-    nd = path[-1]
+  def _insert_case5(self,node):
+    # print("  tree:",self,"  insert_case5:",node)
+    gp = pyRBT._grandparent(node)
+    pa = node.parent
     gp.black = False
     pa.black = True
-    path.pop() # pop to rotate grandparent
-    path.pop()
-    if nd == pa.l: self._rotate_right(path)
-    else: self._rotate_left(path)
+    if node == pa.l: self._rotate_right(gp)
+    else: self._rotate_left(gp)
 
   # multiset = True allows multiple insertions of the same value
   def insert(self,item,multiset=False):
-    if len(self) == 0:
-      self.root = pyRBT.RBNode(item)
+    if len(self) == 0: self.root = pyRBT.RBNode(item)
     else:
-      p,v = [],self.root
-      while not v.isleaf():
-        p.append(v)
-        if not multiset and item == v.value:
-          v.value = item
+      # Add new node as a leaf node, then balance tree
+      node = self.root
+      while True:
+        if not multiset and item == node.value:
+          node.value = item
           return
-        v = (v.l if item < v.value else v.r)
-      v = pyRBT.RBNode(item,black=False)
-      if item < p[-1].value: p[-1].l = v
-      else: p[-1].r = v
-      # Need to update size
-      for node in p: node.size += 1
-      p.append(v)
-      self._insert_case1(p)
+        nxt = (node.l if item < node.value else node.r)
+        if nxt.isleaf(): break
+        node = nxt
+      newv = pyRBT.RBNode(item,black=False)
+      newv.parent = node
+      if item < node.value: node.l = newv
+      else: node.r = newv
+      # Need to node update sizes
+      while node is not None:
+        node.size += 1
+        node = node.parent
+      # Re-balance tree
+      self._insert_case1(newv)
 
-  def extend(self,l):
-    for x in l: self.insert(x)
+  def extend(self,l,multiset=False):
+    for x in l: self.insert(x,multiset)
 
   # remove element from a given index
   def pop(self,i=None):
     if i is None: i = len(self)-1
-    p = self.getpath(i)
-    return self._delete_path(p)
+    node = self.getnode(i)
+    return self._delete_node(node)
 
   # remove a given item
   def remove(self,item):
-    p = self.findpath(item)
-    if len(p) == 0 or p[-1].value != item:
-      raise KeyError("RBT key '"+str(item)+"' not found")
-    return self._delete_path(p)
+    node = self.findnode(item)
+    if node is None: raise KeyError("RBT key '"+str(item)+"' not found")
+    return self._delete_node(node)
 
-  def _delete_path(self,p):
-    nd = p[-1]
-    val = nd.value # value that is being deleted
+  def _delete_node(self,dnode):
+    node = dnode
+    val = node.value # value that is being deleted
     # go right since we use the < and >= relations for left/right leaves
-    if not nd.r.isleaf():
-      v = nd.r
-      p.append(v)
-      while not v.l.isleaf():
-        v = v.l
-        p.append(v)
-    elif not nd.l.isleaf():
-      v = nd.l
-      p.append(v)
-      while not v.r.isleaf():
-        v = v.r
-        p.append(v)
-    nd.value = p[-1].value
-    for v in p: v.size -= 1
-    self._delete_one_child(p)
+    if not node.r.isleaf():
+      node = node.r
+      while not node.l.isleaf(): node = node.l
+    elif not node.l.isleaf():
+      node = node.l
+      while not node.r.isleaf(): node = node.r
+    dnode.value = node.value # swap value into node to be deleted
+    for v in node.path(): v.size -= 1
+    self._delete_one_child(node)
     return val
 
-  def _delete_one_child(self,path):
-    node = path.pop()
+  def _delete_one_child(self,node):
     child = (node.l if node.r.isleaf() else node.r)
-    self._replace_node(path[-1] if len(path) > 0 else None, node, child)
-    path.append(child) # may be appending a leaf node, this is OK in deletion
+    self._replace_node(node.parent, node, child)
+    # may be appending a leaf node, this is OK in deletion
     if node.isblack():
       if child.isred(): child.black = True
-      else: self._delete_case2(path)
+      else: self._delete_case2(child)
     # `node` is no longer in the tree
 
   # assume we have a parent
-  def _delete_case2(self,path):
-    if len(path) < 2: return
-    (pa,nd,sb) = (path[-2],path[-1],pyRBT._sibling(path))
+  def _delete_case2(self,node):
+    if node.parent is None: return
+    (pa,nd,sb) = (node.parent,node,pyRBT._sibling(node))
     if sb.isred():
       pa.black = False
       sb.black = True
-      path.pop() # pop to rotate parent
-      if nd == pa.l: self._rotate_left(path)
-      else: self._rotate_right(path)
-      path.append(pa)
-      path.append(nd)
-    self._delete_case3(path)
+      if nd == pa.l: self._rotate_left(pa)
+      else: self._rotate_right(pa)
+    self._delete_case3(node)
 
-  def _delete_case3(self,path):
-    (pa,nd,sb) = (path[-2],path[-1],pyRBT._sibling(path))
+  def _delete_case3(self,node):
+    (pa,nd,sb) = (node.parent,node,pyRBT._sibling(node))
     if pa.isblack() and sb.isblack() and sb.l.isblack() and sb.r.isblack():
       sb.black = False
-      path.pop()
-      self._delete_case2(path) # parent
+      self._delete_case2(pa) # parent
     else:
-      self._delete_case4(path) # node
+      self._delete_case4(node) # node
 
-  def _delete_case4(self,path):
-    (pa,nd,sb) = (path[-2],path[-1],pyRBT._sibling(path))
+  def _delete_case4(self,node):
+    (pa,nd,sb) = (node.parent,node,pyRBT._sibling(node))
     if pa.isred() and sb.isblack() and sb.l.isblack() and sb.r.isblack():
       sb.black = False
       pa.black = True
     else:
-      self._delete_case5(path)
+      self._delete_case5(node)
 
-  def _delete_case5(self,path):
-    (pa,nd,sb) = (path[-2],path[-1],pyRBT._sibling(path))
+  def _delete_case5(self,node):
+    (pa,nd,sb) = (node.parent,node,pyRBT._sibling(node))
     if sb.isblack():
-      path.pop() # pop to rotate sibling
-      path.append(sb)
       if nd == pa.l and sb.r.isblack() and sb.l.isred():
         sb.black = False
         sb.l.black = True
-        self._rotate_right(path)
+        self._rotate_right(sb)
       elif nd == pa.r and sb.l.isblack() and sb.r.isred():
         sb.black = False
         sb.r.black = True
-        self._rotate_left(path)
-      path.pop() # remove sibling, re-add node
-      path.append(nd)
-    self._delete_case6(path)
+        self._rotate_left(sb)
+    self._delete_case6(node)
 
-  def _delete_case6(self,path):
-    (pa,nd,sb) = (path[-2],path[-1],pyRBT._sibling(path))
+  def _delete_case6(self,node):
+    (pa,nd,sb) = (node.parent,node,pyRBT._sibling(node))
     sb.black = pa.black
     pa.black = True
-    path.pop() # rotate parent
     if nd == pa.l:
       sb.r.black = True
-      self._rotate_left(path)
+      self._rotate_left(pa)
     else:
       assert nd == pa.r
       sb.l.black = True
-      self._rotate_right(path)
+      self._rotate_right(pa)
 
   def find(self,item):
-    v = self.root
-    while not v.isleaf():
-      if item == v.value: return item
-      v = (v.l if item < v.value else v.r)
-    return None
+    node = self.findnode(item)
+    return node.value if node is not None else None
 
-  # path = tree.findpath(x)
-  # =>
-  #   x == path[-1].value OR
-  #   len(path) <= 1 OR
-  #   x between path[-1].value and path[-2].value
-  def findpath(self,item,p=None):
-    if p is None: p,v = [],self.root
-    else: v = p.pop()
-    while not v.isleaf():
-      p.append(v)
-      if item == v.value: return p
-      v = (v.l if item < v.value else v.r)
-    return p
+  def findnode(self,item,node=None):
+    if node is None: node = self.root
+    while not node.isleaf():
+      if item == node.value: return node
+      node = (node.l if item < node.value else node.r)
+    return None
 
   # fetch via index
   # index is within `start` if passed
   def get(self,i,start=None):
-    if start is None: v = self.root
-    if i < 0: i += len(v) # allow negative indices
-    if i < 0 or i >= len(v):
+    node = self.getnode(i,start)
+    return node.value
+
+  def getnode(self,i,start=None):
+    node = self.root if start is None else start
+    if i < 0: i += len(node) # allow negative indices
+    if i < 0 or i >= len(node):
       raise IndexError("index out of range (%d vs 0..%d)" % (i, len(v)))
-    while not v.isleaf():
-      if i < len(v.l): v = v.l
-      elif i == len(v.l): return v.value
+    while not node.isleaf():
+      if i < len(node.l): node = node.l
+      elif i == len(node.l): return node
       else:
-        i -= len(v.l) + 1
-        v = v.r
+        i -= len(node.l) + 1
+        node = node.r
     raise RuntimeError("Internal pyRBT error")
 
-  # fetch path via index
-  # index is within `p[-1]` if passed
-  def getpath(self,i,p=None):
-    if p is None: p,v = [],self.root
-    else: v = p[-1]
-    if i < 0: i += len(v) # allow negative indices
-    if i < 0 or i >= len(v):
-      raise IndexError("index out of range (%d vs 0..%d)" % (i, len(v)))
-    while not v.isleaf():
-      p.append(v)
-      if i < len(v.l): v = v.l
-      elif i == len(v.l): return p
-      else:
-        i -= len(v.l) + 1
-        v = v.r
-    raise RuntimeError("Internal pyRBT error")
-
-  # Get the index of an item
+  # Get the first index of an given value
   def index(self,item,start=None):
-    if start is None: v = self.root
+    node = self.root if start is None else start
     i = 0
     idx = None
-    while not v.isleaf():
-      if item < v.value: v = v.l
-      elif item == v.value:
+    while not node.isleaf():
+      if item < node.value: node = node.l
+      elif item == node.value:
         # found one instance, look for earlier ones
-        idx = i+len(v.l)
-        v = v.l
+        idx = i+len(node.l)
+        node = node.l
       else:
-        i += len(v.l) + 1
-        v = v.r
+        i += len(node.l) + 1
+        node = node.r
     if idx is None: raise KeyError('Key not found: '+str(item))
     return idx
 
@@ -452,26 +417,26 @@ class pyRBT:
     assert (len(self) == 0) == self.root.isleaf() # size is zero only if empty
     assert self.root.isblack() # root node is black
     nblack = -1
-    npaths = 0
-    for p in self.paths():
+    nnodes = 0
+    for node in self.nodes():
       # print("Check:",'->'.join([str(x) for x in p]))
-      assert not p[-1].isleaf() or p[-1].isblack() # all leaf nodes are black
-      if p[-1].isred():
+      assert not node.isleaf() or node.isblack() # all leaf nodes are black
+      if node.isred():
         # all red nodes have only black children
-        assert p[-1].l.isblack() and p[-1].r.isblack()
+        assert node.l.isblack() and node.r.isblack()
       # Every path from the the root has the same number of black nodes
-      if p[-1].l.isleaf() or p[-1].r.isleaf():
-        ntmpb = sum([ x.isblack() for x in p ]) + 1
+      if node.l.isleaf() or node.r.isleaf():
+        ntmpb = sum([ x.isblack() for x in node.path() ]) + 1
         assert nblack == -1 or nblack == ntmpb
         nblack = ntmpb
-      npaths += 1
-    assert(npaths == len(self))
-    # print('nblack:',nblack,'npaths:',npaths)
+      nnodes += 1
+    assert(nnodes == len(self))
+    # print('nblack:',nblack,'nnodes:',nnodes)
 
 
 import random
 
-def _test_rbt(nums):
+def _test_rbt_auto(nums):
   tree = pyRBT()
   vals = [] # sorted values in the tree
   # insert values into the tree
@@ -508,6 +473,19 @@ def _test_rbt(nums):
   assert len(tree) == 0
   tree.check()
 
+def _test_rbt_autotests():
+  print("Doing mixed automated tests...")
+  vals = list(range(1,100))
+  _test_rbt_auto(vals) # 1..N in sorted order
+  # vals.reverse()
+  # _test_rbt_auto(vals) # 1..N in reverse sorted order
+  random.shuffle(vals)
+  _test_rbt_auto(vals) # 1..N in random order
+  _test_rbt_auto([]) # test epmty set
+  _test_rbt_auto([random.randrange(100) for x in range(200)]) # rand with repeats
+  _test_rbt_auto([random.randrange(1000) for x in range(200)]) # rand with repeats
+  _test_rbt_auto([1]*10) # multiple 1s
+
 def _test_rbt_comparison():
   print("Testing RBT comparison...")
   abc = pyRBT()
@@ -532,23 +510,21 @@ def _test_rbt_comparison():
   assert not (abc < xyz) and not (abc <= xyz) and not (abc == xyz)
   assert not (xyz > abc) and not (xyz >= abc)
 
+def _test_rbt_index():
+  print("Test index returns first index...")
+  tree = pyRBT()
+  tree.extend([3,2,1,1,2,3],multiset=True) # 1,1,2,2,3,3
+  assert(len(tree) == 6)
+  for i in range(1,4): assert(tree.index(i) == (i-1)*2)
 
 def _test_red_black_tree():
   print("Testing RBT")
-  tree = pyRBT()
 
   # Insert [1,2,...,N]
-  print("Doing mixed automated tests...")
-  vals = list(range(1,100))
-  _test_rbt(vals) # 1..N in sorted order
-  random.shuffle(vals)
-  _test_rbt(vals) # 1..N in random order
-  _test_rbt([]) # test epmty set
-  _test_rbt([random.randrange(100) for x in range(200)]) # random numbers with repeats
-  _test_rbt([random.randrange(1000) for x in range(200)]) # random numbers with repeats
-  _test_rbt([1]*10) # multiple 1s
+  _test_rbt_autotests()
 
   # Test python features
+  tree = pyRBT()
   vals = list(range(1,10))
   sortedvals = sorted(list(vals)) # sorted copy
   random.shuffle(vals)
@@ -588,10 +564,8 @@ def _test_red_black_tree():
     tree.remove(v)
     tree.check()
   _test_rbt_comparison()
+  _test_rbt_index()
   print("Looks like the tests all passed...")
 
 if __name__ == '__main__':
   _test_red_black_tree()
-
-del _test_rbt
-del _test_red_black_tree
