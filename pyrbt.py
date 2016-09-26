@@ -58,40 +58,49 @@ class pyRBT:
         node = node.parent
 
   class RBIterator:
-    def __init__(self,tree,reverse=False,retnodes=False):
+    def __init__(self,tree,reverse=False,retnodes=False,nxt=None):
+      # if node==None goto nxt, if node==None and nxt==None -> end of iteration
       self.tree = tree
       self.node = None
       self.fwd = not reverse
       self.retnodes = retnodes
-    def __iter__(self): return self
-    def next(self): return self.__next__()
-    def __next__(self):
-      node = self.node
-      if node is None:
-        if self.tree.root.isleaf(): raise StopIteration() # empty tree
-        node = self.tree.root
-        if self.fwd:
-          while not node.l.isleaf(): node = node.l
+      # set nxt to first node we want to visit
+      if nxt is None and not tree.root.isleaf():
+        nxt = tree.root
+        if not reverse:
+          while not nxt.l.isleaf(): nxt = nxt.l
         else:
-          while not node.r.isleaf(): node = node.r
-      elif self.fwd and not node.r.isleaf():
+          while not nxt.r.isleaf(): nxt = nxt.r
+      self.nxt = nxt
+    def __iter__(self): return self
+    @staticmethod
+    def next_node(node,tree,fwd,nxt=None):
+      if node is None: return nxt
+      elif fwd and not node.r.isleaf():
         # Take the secondary fork (right fork when forward)
         node = node.r
         while not node.l.isleaf(): node = node.l
-      elif not self.fwd and not node.l.isleaf():
+      elif not fwd and not node.l.isleaf():
         # Take the secondary fork (left fork when reverse)
         node = node.l
         while not node.r.isleaf(): node = node.r
       else:
         # Back up the tree - find first parent node that used left node
-        if self.fwd:
+        if fwd:
           while node.parent is not None and node is node.parent.r: node = node.parent
         else:
           while node.parent is not None and node is node.parent.l: node = node.parent
-        if node.parent is None: raise StopIteration()
         node = node.parent
-      self.node = node
-      return node if self.retnodes else node.value
+      return node
+    def next(self): return self.__next__()
+    def __next__(self):
+      self.node = pyRBT.RBIterator.next_node(self.node,self.tree,self.fwd,self.nxt)
+      if self.node is None: raise StopIteration()
+      return self.node if self.retnodes else self.node.value
+    def delete(self):
+      self.nxt = pyRBT.RBIterator.next_node(self.node,self.tree,self.fwd,self.nxt)
+      self.tree._delete_node(self.node)
+      self.node = None
 
   leaf = RBLeaf(None)
 
@@ -118,8 +127,12 @@ class pyRBT:
     return self.root.treestr()
 
   # override the square bracket operator [] to get a value by index
-  def __getitem__(self,i):
-    return self.get(i)
+  def __getitem__(self,key):
+    if isinstance(key, slice):
+      return [ self[i] for i in range(*key.indices(len(self))) ]
+    if isinstance(key, int):
+      return self.get(key)
+    raise TypeError("Invalid argument type.")
 
   # setitem not defined since we don't map from key -> value
   # def __setitem__(self,key,value):
@@ -133,6 +146,13 @@ class pyRBT:
 
   def clear(self):
     self.root = pyRBT.leaf
+
+  def __hash__(self):
+    if len(self) == 0: return 0
+    # djb2 by Dan Bernstein (http://stackoverflow.com/a/7666577/431087)
+    h = 5381 # this is a prime
+    for v in self: h = ((h*33) ^ hash(v)) & 0xffffffffffffffff
+    return h
 
   # compare two Red Black Trees lexicographically
   # [1] < [2] < [1,1] < [1,2] < [1,2,0]
@@ -173,6 +193,19 @@ class pyRBT:
     elif pa.l is ch: pa.l = newch
     else: pa.r = newch
     newch.parent = pa
+
+  # Swap two RBNodes
+  def _swap_nodes(self,a,b):
+    a.black,b.black = b.black,a.black
+    a.value,b.value = b.value,a.value
+    a.size,b.size = b.size,a.size
+    apa,bpa = a.parent,b.parent
+    self._replace_node(apa,a,b)
+    self._replace_node(bpa,b,a)
+    a.l,b.l = b.l,a.l
+    a.r,b.r = b.r,a.r
+    a.l.parent = a.r.parent = a
+    b.l.parent = b.r.parent = b
 
   #
   #   pa    ->    ch
@@ -290,8 +323,9 @@ class pyRBT:
     return self._delete_node(node)
 
   def _delete_node(self,dnode):
+    # Find bottom internal node to swap with
     node = dnode
-    val = node.value # value that is being deleted
+    val = dnode.value
     # go right since we use the < and >= relations for left/right leaves
     if not node.r.isleaf():
       node = node.r
@@ -299,9 +333,12 @@ class pyRBT:
     elif not node.l.isleaf():
       node = node.l
       while not node.r.isleaf(): node = node.r
-    dnode.value = node.value # swap value into node to be deleted
-    for v in node.path(): v.size -= 1
-    self._delete_one_child(node)
+    # swap value into node to be deleted
+    if node is not dnode:
+      self._swap_nodes(dnode,node)
+      dnode.value,node.value = node.value,dnode.value
+    for v in dnode.path(): v.size -= 1
+    self._delete_one_child(dnode)
     return val
 
   def _delete_one_child(self,node):
@@ -386,7 +423,7 @@ class pyRBT:
     node = self.root if start is None else start
     if i < 0: i += len(node) # allow negative indices
     if i < 0 or i >= len(node):
-      raise IndexError("index out of range (%d vs 0..%d)" % (i, len(v)))
+      raise IndexError("index out of range (%d vs 0..%d)" % (i, len(node)))
     while not node.isleaf():
       if i < len(node.l): node = node.l
       elif i == len(node.l): return node
@@ -430,142 +467,5 @@ class pyRBT:
         assert nblack == -1 or nblack == ntmpb
         nblack = ntmpb
       nnodes += 1
-    assert(nnodes == len(self))
+    assert nnodes == len(self)
     # print('nblack:',nblack,'nnodes:',nnodes)
-
-
-import random
-
-def _test_rbt_auto(nums):
-  tree = pyRBT()
-  vals = [] # sorted values in the tree
-  # insert values into the tree
-  for v in nums:
-    tree.insert(v,True)
-    vals.append(v)
-    vals.sort()
-    tree.check()
-    assert sum([ x==y for x,y in zip(vals,iter(tree)) ]) == len(vals)
-    # Test indexing
-    for (i,v) in enumerate(vals): assert(tree[i] == v)
-    for (i,v) in enumerate(vals): assert tree.index(v) == vals.index(v)
-  # remove the values in a random order
-  rvals = list(nums)
-  random.shuffle(rvals)
-  for v in rvals:
-    tree.remove(v)
-    vals.remove(v)
-    tree.check()
-    assert sum([ x==y for x,y in zip(vals,iter(tree)) ]) == len(vals)
-    # Test indexing
-    for (i,v) in enumerate(vals): assert tree[i] == v
-    for (i,v) in enumerate(vals): assert tree.index(v) == vals.index(v)
-  # Re-build sorted remove forwards
-  sortedvals = sorted(vals)
-  tree.extend(sortedvals)
-  for v in sortedvals: assert sortedvals.remove(v) == tree.remove(v)
-  assert len(tree) == 0
-  tree.check()
-  # Re-build sorted remove backwards
-  sortedvals = sorted(vals)
-  tree.extend(sortedvals)
-  for v in reversed(sortedvals): assert sortedvals.remove(v) == tree.remove(v)
-  assert len(tree) == 0
-  tree.check()
-
-def _test_rbt_autotests():
-  print("Doing mixed automated tests...")
-  vals = list(range(1,100))
-  _test_rbt_auto(vals) # 1..N in sorted order
-  # vals.reverse()
-  # _test_rbt_auto(vals) # 1..N in reverse sorted order
-  random.shuffle(vals)
-  _test_rbt_auto(vals) # 1..N in random order
-  _test_rbt_auto([]) # test epmty set
-  _test_rbt_auto([random.randrange(100) for x in range(200)]) # rand with repeats
-  _test_rbt_auto([random.randrange(1000) for x in range(200)]) # rand with repeats
-  _test_rbt_auto([1]*10) # multiple 1s
-
-def _test_rbt_comparison():
-  print("Testing RBT comparison...")
-  abc = pyRBT()
-  xyz = pyRBT()
-  abc.extend([1,2,3,9])
-  xyz.extend([9,3,2,1])
-  assert abc == xyz and abc >= xyz and abc <= xyz
-  assert not (abc > xyz) and not (abc < xyz) and not (abc != xyz)
-  abc.remove(3)
-  # abc < xyz
-  assert abc < xyz and xyz > abc and abc != xyz
-  assert not (abc > xyz) and not (abc >= xyz) and not (abc == xyz)
-  assert not (xyz < abc) and not (xyz <= abc)
-  abc.clear()
-  xyz.clear()
-  # abc == xyz
-  assert abc == xyz and abc <= xyz and abc >= xyz
-  assert not (abc != xyz) and not (abc < xyz) and not (abc > xyz)
-  # abc > xyz
-  abc.insert(1)
-  assert abc > xyz and xyz < abc and abc != xyz
-  assert not (abc < xyz) and not (abc <= xyz) and not (abc == xyz)
-  assert not (xyz > abc) and not (xyz >= abc)
-
-def _test_rbt_index():
-  print("Test index returns first index...")
-  tree = pyRBT()
-  tree.extend([3,2,1,1,2,3],multiset=True) # 1,1,2,2,3,3
-  assert(len(tree) == 6)
-  for i in range(1,4): assert(tree.index(i) == (i-1)*2)
-
-def _test_red_black_tree():
-  print("Testing RBT")
-
-  # Insert [1,2,...,N]
-  _test_rbt_autotests()
-
-  # Test python features
-  tree = pyRBT()
-  vals = list(range(1,10))
-  sortedvals = sorted(list(vals)) # sorted copy
-  random.shuffle(vals)
-  for v in vals:
-    tree.insert(v,True)
-    tree.check()
-  # -- Testing iterate paths --
-  # print("Testing path iteration...")
-  # for path in tree.paths():
-  #   print(' ','->'.join([str(x) for x in path]))
-  # print("Testing path iterating reversed...")
-  # for path in tree.paths(reverse=True):
-  #   print(' ','->'.join([str(x) for x in path]))
-  print("Testing value iteration...")
-  assert ','.join([str(x) for x in tree]) == ','.join([str(x) for x in sortedvals])
-  print("Testing value iteration reversed...")
-  assert ','.join([str(x) for x in reversed(tree)]) == ','.join([str(x) for x in reversed(sortedvals)])
-  print("Testing tree[i]...")
-  for i in range(len(tree)): assert tree[i] == sortedvals[i]
-  print("Testing find...")
-  for f in [-1,0.5,len(vals)+1,len(vals)-3.6]: assert tree.find(f) is None
-  print("Testing tree.index(i)...")
-  for (i,v) in enumerate(sortedvals): assert tree.index(v) == sortedvals.index(v)
-  print("Checking tree...")
-  tree.check()
-  # Test removing random nodes with pop
-  while len(sortedvals) > 0:
-    i = random.randrange(len(sortedvals))
-    assert tree.pop(i) == sortedvals.pop(i)
-    tree.check()
-  # re-build tree and sorted list
-  tree.extend(vals)
-  sortedvals = sorted(list(vals)) # sorted copy
-  assert sum([ x == y for (x,y) in zip(iter(tree),sortedvals)]) == len(vals)
-  print("Testing remove...")
-  for v in vals:
-    tree.remove(v)
-    tree.check()
-  _test_rbt_comparison()
-  _test_rbt_index()
-  print("Looks like the tests all passed...")
-
-if __name__ == '__main__':
-  _test_red_black_tree()
