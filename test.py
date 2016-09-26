@@ -134,12 +134,66 @@ def _test_itr_delete():
     if x % 2 == 0: i.delete()
   assert len(t) == 2
 
+# Check a finished iterator remains a finised iterator
+def _test_itr_stop():
+  print("Testing iterator stops...")
+  t = pyRBT()
+  t.extend(['a','b','c','d','e'])
+  i,c = iter(t),0
+  for x in range(len(t)): next(i)
+  try: x = next(i)
+  except StopIteration: c += 1
+  try: x = next(i)
+  except StopIteration: c += 2
+  assert c == 3
+
+def _test_union():
+  print("Testing union...")
+  a,b = pyRBT(),pyRBT()
+  a.extend(list(range(0,10)))
+  b.extend(list(range(7,20)))
+  c = a.union(b)
+  assert list(c) == list(range(0,20))
+  c = c.union(c)
+  assert list(c) == list(range(0,20))
+
+def _test_diff():
+  a = pyRBT(range(0,10))
+  b = pyRBT(range(5,20))
+  c = a.diff(b)
+  assert list(c) == list(range(0,5))
+  c = c.diff(b)
+  assert list(c) == list(range(0,5))
+  c = c.diff(a)
+  assert list(c) == []
+
+def _test_intersect():
+  print("Testing intersect...")
+  a,b = pyRBT(),pyRBT()
+  a.extend(list(range(0,10)))
+  b.extend(list(range(7,20)))
+  c = a.intersect(b)
+  assert list(c) == [7,8,9]
+
+def _test_symmetric_diff():
+  print("Testing union...")
+  a,b = pyRBT(),pyRBT()
+  a.extend(list(range(0,10)))
+  b.extend(list(range(7,20)))
+  c = a.symmetric_diff(b)
+  assert list(c) == list(range(7))+list(range(10,20))
+
 def main():
   print("Testing RBT")
   _test_splice()
   _test_hash()
   _test_delete()
   _test_itr_delete()
+  _test_itr_stop()
+  _test_union()
+  _test_diff()
+  _test_intersect()
+  _test_symmetric_diff()
 
   # Insert [1,2,...,N]
   _test_rbt_autotests()

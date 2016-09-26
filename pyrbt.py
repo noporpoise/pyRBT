@@ -96,6 +96,7 @@ class pyRBT:
     def __next__(self):
       self.node = pyRBT.RBIterator.next_node(self.node,self.tree,self.fwd,self.nxt)
       if self.node is None: raise StopIteration()
+      self.nxt = None
       return self.node if self.retnodes else self.node.value
     def delete(self):
       self.nxt = pyRBT.RBIterator.next_node(self.node,self.tree,self.fwd,self.nxt)
@@ -104,8 +105,9 @@ class pyRBT:
 
   leaf = RBLeaf(None)
 
-  def __init__(self):
+  def __init__(self,l=None):
     self.root = pyRBT.leaf
+    if l is not None: self.extend(l)
 
   def __len__(self):
     return self.root.size
@@ -448,6 +450,51 @@ class pyRBT:
         node = node.r
     if idx is None: raise KeyError('Key not found: '+str(item))
     return idx
+
+  # Return a tree that is the union of this tree and other
+  def union(self,other):
+    tree = pyRBT()
+    tree.extend(self)
+    tree.extend(other)
+    return tree
+
+  # Return a tree contain elements from this tree not in other tree
+  def diff(self,other):
+    tree = pyRBT()
+    for x in self:
+      if x not in other:
+        tree.insert(x)
+    return tree
+
+  # Return a tree that is the intersection of this tree and other
+  def intersect(self,other):
+    tree = pyRBT()
+    ai,bi = iter(self),iter(other)
+    try:
+      a,b = next(ai),next(bi)
+      while True:
+        if a==b:
+          tree.insert(a)
+          a,b = next(ai),next(bi)
+        elif a < b: a = next(ai)
+        else: b = next(bi)
+    except StopIteration: pass
+    return tree
+
+  # Return a tree that contains elements that are only in one of self,other
+  def symmetric_diff(self,other):
+    tree = pyRBT()
+    ai,bi = iter(self),iter(other)
+    try:
+      a,b = next(ai),next(bi)
+      while True:
+        if a==b: a,b = next(ai),next(bi)
+        elif a < b: tree.insert(a); a = next(ai)
+        else: tree.insert(b); b = next(bi)
+    except StopIteration: pass
+    tree.extend(ai)
+    tree.extend(bi)
+    return tree
 
   # Check data structure integrity by checking invariants are met
   def check(self):
