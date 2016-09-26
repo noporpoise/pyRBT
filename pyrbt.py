@@ -131,7 +131,7 @@ class pyRBT:
   # override the square bracket operator [] to get a value by index
   def __getitem__(self,key):
     if isinstance(key, slice):
-      return [ self[i] for i in range(*key.indices(len(self))) ]
+      return [ self.get(i) for i in range(*key.indices(len(self))) ]
     if isinstance(key, int):
       return self.get(key)
     raise TypeError("Invalid argument type.")
@@ -287,14 +287,14 @@ class pyRBT:
 
   # multiset = True allows multiple insertions of the same value
   def insert(self,item,multiset=False):
-    if len(self) == 0: self.root = pyRBT.RBNode(item)
+    if len(self) == 0: newv = self.root = pyRBT.RBNode(item)
     else:
       # Add new node as a leaf node, then balance tree
       node = self.root
       while True:
         if not multiset and item == node.value:
           node.value = item
-          return
+          return node.value
         nxt = (node.l if item < node.value else node.r)
         if nxt.isleaf(): break
         node = nxt
@@ -308,6 +308,7 @@ class pyRBT:
         node = node.parent
       # Re-balance tree
       self._insert_case1(newv)
+    return newv.value
 
   def extend(self,l,multiset=False):
     for x in l: self.insert(x,multiset)
@@ -516,3 +517,62 @@ class pyRBT:
       nnodes += 1
     assert nnodes == len(self)
     # print('nblack:',nblack,'nnodes:',nnodes)
+
+class pyRBMap(pyRBT):
+  class RBKeyValue:
+    # RBKeyValue compare only the key but also store a value
+    def __init__(self,k,v=None): self.k,self.v = k,v
+    def __cmp__(x,y): return (x.k>y.k)-(x.k<y.k)
+    def __gt__(x,y): return a.k >  b.k
+    def __ge__(x,y): return x.k >= y.k
+    def __eq__(x,y): return x.k == y.k
+    def __ne__(x,y): return x.k != y.k
+    def __le__(x,y): return x.k <= y.k
+    def __lt__(x,y): return x.k <  y.k
+
+  def __init__(self,h=None):
+    super(pyRBMap,self).__init__()
+    if h is not None: self.extend(h)
+
+  # order by (key, value) for each element
+  def __cmp__(x,y):
+    if len(x) != len(y): return len(x) - len(y)
+    for ((ak,av),(bk,bv)) in zip(x,y):
+      if ak != bk: return -1 if ak < bk else 1
+      if av != bv: return -1 if av < bv else 1
+    return 0
+
+  def insert(self,k,v):
+    return super(pyRBMap,self).insert(pyRBMap.RBKeyValue(k,v)).v
+
+  def extend(self,h):
+    for k,v in h.items():
+      self.insert(k,v)
+
+  def __setitem__(self,k,v):
+    self.insert(k,v)
+
+  def __getitem__(self,key):
+    if isinstance(key, slice):
+      return [ self.find(pyRBMap.RBKeyValue(x)).v for x in range(*key.indices(len(self))) ]
+    if isinstance(key, int):
+      return self.find(pyRBMap.RBKeyValue(key)).v
+    raise TypeError("Invalid argument type.")
+
+  # Generator for keys (ordered by key)
+  def keys(self,reverse=False):
+    for k,v in self:
+      yield k
+
+  # Generator for values (ordered by key)
+  def values(self,reverse=False):
+    for k,v in self:
+      yield v
+
+  # Generator for (key,value) pairs
+  def keyvalues(self,reverse=False):
+    for x in pyRBT.RBIterator(self,reverse,False):
+      yield (x.k,x.v)
+
+  def __iter__(self): return self.keyvalues()
+  def __reversed__(self): return self.keyvalues(True)

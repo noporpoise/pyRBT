@@ -1,5 +1,5 @@
 from __future__ import print_function
-from pyrbt import pyRBT
+from pyrbt import pyRBT,pyRBMap
 import random
 
 def _test_rbt_auto(nums):
@@ -158,6 +158,7 @@ def _test_union():
   assert list(c) == list(range(0,20))
 
 def _test_diff():
+  print("Testing diff...")
   a = pyRBT(range(0,10))
   b = pyRBT(range(5,20))
   c = a.diff(b)
@@ -176,12 +177,29 @@ def _test_intersect():
   assert list(c) == [7,8,9]
 
 def _test_symmetric_diff():
-  print("Testing union...")
+  print("Testing symmetric diff...")
   a,b = pyRBT(),pyRBT()
   a.extend(list(range(0,10)))
   b.extend(list(range(7,20)))
   c = a.symmetric_diff(b)
   assert list(c) == list(range(7))+list(range(10,20))
+
+def _test_map():
+  print("Testing map...")
+  m = pyRBMap()
+  m[4] = 'hi'
+  m[1] = 'moo'
+  m[4] = 'woof'
+  m[2] = 'daisy'
+  m[5] = 'words'
+  assert list(m.keys()) == [1,2,4,5]
+  assert list(m.values()) == ['moo','daisy','woof','words']
+  assert m[4] == 'woof'
+  assert len(m) == 4
+  n = pyRBMap({1:'hi',2:'hi',4:'hi',5:'hi'})
+  assert m != n
+  n[1],n[2],n[4],n[5] = 'moo','daisy','woof','words'
+  assert m == n
 
 def main():
   print("Testing RBT")
@@ -194,6 +212,7 @@ def main():
   _test_diff()
   _test_intersect()
   _test_symmetric_diff()
+  _test_map()
 
   # Insert [1,2,...,N]
   _test_rbt_autotests()
