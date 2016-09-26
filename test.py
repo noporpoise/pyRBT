@@ -202,6 +202,11 @@ def _test_map():
   assert m == n
   assert 2 in n
   assert 3 not in n
+  del(n[1])
+  m.remove(1)
+  assert m == n
+  assert list(n.keys()) == [2,4,5] and list(n.values()) == ['daisy','woof','words']
+  assert list(m.keys()) == [2,4,5] and list(m.values()) == ['daisy','woof','words']
 
 def main():
   print("Testing RBT")

@@ -562,6 +562,12 @@ class pyRBMap(pyRBT):
   def __contains__(self,item):
     return self.find(pyRBMap.RBKeyValue(item)) is not None
 
+  def remove(self,item):
+    return super(pyRBMap,self).remove(pyRBMap.RBKeyValue(item))
+
+  def __delitem__(self,k):
+    self.remove(k)
+
   # Generator for keys (ordered by key)
   def keys(self,reverse=False):
     for k,v in self:
