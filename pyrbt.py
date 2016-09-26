@@ -559,6 +559,9 @@ class pyRBMap(pyRBT):
       return self.find(pyRBMap.RBKeyValue(key)).v
     raise TypeError("Invalid argument type.")
 
+  def __contains__(self,item):
+    return self.find(pyRBMap.RBKeyValue(item)) is not None
+
   # Generator for keys (ordered by key)
   def keys(self,reverse=False):
     for k,v in self:

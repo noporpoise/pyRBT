@@ -200,6 +200,8 @@ def _test_map():
   assert m != n
   n[1],n[2],n[4],n[5] = 'moo','daisy','woof','words'
   assert m == n
+  assert 2 in n
+  assert 3 not in n
 
 def main():
   print("Testing RBT")
