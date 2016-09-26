@@ -15,8 +15,8 @@ from __future__ import print_function
 # Longest path is 2*B-1 nodes where B is the black depth of the tree
 # Shortest path is B nodes
 
-class pyRBT:
-  class RBLeaf:
+class pyRBT(object):
+  class RBLeaf(object):
     def __init__(self,parent):
       self.size = 0
       self.parent = parent
@@ -31,7 +31,7 @@ class pyRBT:
         return ".["+pa+"]"
       else: return "."
 
-  class RBNode:
+  class RBNode(object):
     def __init__(self,value,black=True):
       self.value = value
       self.black = black
@@ -57,7 +57,7 @@ class pyRBT:
         yield node
         node = node.parent
 
-  class RBIterator:
+  class RBIterator(object):
     def __init__(self,tree,reverse=False,retnodes=False,nxt=None):
       # if node==None goto nxt, if node==None and nxt==None -> end of iteration
       self.tree = tree
@@ -519,7 +519,7 @@ class pyRBT:
     # print('nblack:',nblack,'nnodes:',nnodes)
 
 class pyRBMap(pyRBT):
-  class RBKeyValue:
+  class RBKeyValue(object):
     # RBKeyValue compare only the key but also store a value
     def __init__(self,k,v=None): self.k,self.v = k,v
     def __cmp__(x,y): return (x.k>y.k)-(x.k<y.k)
