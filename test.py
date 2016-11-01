@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 from __future__ import print_function
 from pyrbt import pyRBT,pyRBMap
 import random
@@ -40,7 +41,7 @@ def _test_rbt_auto(nums):
   tree.check()
 
 def _test_rbt_autotests():
-  print("Doing mixed automated tests...")
+  print("Doing mixed automated tests (slow)...")
   vals = list(range(1,100))
   _test_rbt_auto(vals) # 1..N in sorted order
   # vals.reverse()
@@ -266,7 +267,7 @@ def main():
     tree.check()
   _test_rbt_comparison()
   _test_rbt_index()
-  print("Looks like the tests all passed...")
+  print("Looks like the tests all passed.")
 
 if __name__ == '__main__':
   main()

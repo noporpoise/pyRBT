@@ -16,7 +16,10 @@ from __future__ import print_function
 # Shortest path is B nodes
 
 class pyRBT(object):
+  __slots__ = ('root')
+
   class RBLeaf(object):
+    __slots__ = ('size','parent')
     def __init__(self,parent):
       self.size = 0
       self.parent = parent
@@ -32,6 +35,7 @@ class pyRBT(object):
       else: return "."
 
   class RBNode(object):
+    __slots__ = ('value','black','size','l','r','parent')
     def __init__(self,value,black=True):
       self.value = value
       self.black = black
@@ -57,13 +61,13 @@ class pyRBT(object):
         yield node
         node = node.parent
 
-  class RBIterator(object):
-    def __init__(self,tree,reverse=False,retnodes=False,nxt=None):
+  class RBTIterator(object):
+    __slots__ = ('tree','fwd','node','nxt')
+    def __init__(self,tree,reverse=False,nxt=None):
       # if node==None goto nxt, if node==None and nxt==None -> end of iteration
       self.tree = tree
-      self.node = None
       self.fwd = not reverse
-      self.retnodes = retnodes
+      self.node = None
       # set nxt to first node we want to visit
       if nxt is None and not tree.root.isleaf():
         nxt = tree.root
@@ -94,35 +98,47 @@ class pyRBT(object):
       return node
     def next(self): return self.__next__()
     def __next__(self):
-      self.node = pyRBT.RBIterator.next_node(self.node,self.tree,self.fwd,self.nxt)
+      self.node = pyRBT.RBTIterator.next_node(self.node,self.tree,self.fwd,self.nxt)
       if self.node is None: raise StopIteration()
       self.nxt = None
-      return self.node if self.retnodes else self.node.value
+      return self.node
+    def prev(self): return self.__prev__()
+    def __prev__(self):
+      n = self.node if self.node is not None else self.nxt
+      p = pyRBT.RBTIterator.next_node(n,self.tree,not self.fwd,None)
+      if self.node is None: raise StopIteration()
+      self.node = None
+      self.nxt = n
+      return p
     def delete(self):
-      self.nxt = pyRBT.RBIterator.next_node(self.node,self.tree,self.fwd,self.nxt)
+      self.nxt = pyRBT.RBTIterator.next_node(self.node,self.tree,self.fwd,self.nxt)
       self.tree._delete_node(self.node)
       self.node = None
+    def insert(self,v):
+      return self.tree.insert(v)
 
-  leaf = RBLeaf(None)
+  class RBTValIterator(RBTIterator):
+    def __next__(self): return super(pyRBT.RBTValIterator,self).__next__().value
+    def __prev__(self): return super(pyRBT.RBTValIterator,self).__prev__().value
 
-  def __init__(self,l=None):
-    self.root = pyRBT.leaf
-    if l is not None: self.extend(l)
+  def __init__(self,lst=None):
+    self.root = pyRBT.RBLeaf(None)
+    if lst is not None: self.extend(lst)
 
   def __len__(self):
     return self.root.size
 
   # Editing the tree voids any iterators! Do not edit the tree whilst iterating.
   def __iter__(self):
-    return pyRBT.RBIterator(self,False,False)
+    return pyRBT.RBTValIterator(self,False)
 
   # Get a reverse iterator by overriding reversed(...)
   def __reversed__(self):
-    return pyRBT.RBIterator(self,True,False)
+    return pyRBT.RBTValIterator(self,True)
 
   # Iterator that returns each node in order
   def nodes(self,reverse=False):
-    return pyRBT.RBIterator(self,reverse,True)
+    return pyRBT.RBTIterator(self,reverse)
 
   # Get a string representation of the tree
   def __str__(self):
@@ -147,7 +163,7 @@ class pyRBT(object):
     return self.find(item) is not None
 
   def clear(self):
-    self.root = pyRBT.leaf
+    self.root = pyRBT.RBLeaf(None)
 
   def __hash__(self):
     if len(self) == 0: return 0
@@ -530,6 +546,16 @@ class pyRBMap(pyRBT):
     def __le__(x,y): return x.k <= y.k
     def __lt__(x,y): return x.k <  y.k
 
+  class RBMapIterator(pyRBT.RBTIterator):
+    def __next__(self):
+      x = super(pyRBMap.RBMapIterator,self).__next__().value
+      return (x.k, x.v)
+    def __prev__(self):
+      x = super(pyRBMap.RBMapIterator,self).__prev__().value
+      return (x.k, x.v)
+    def insert(self,k,v):
+      return super(pyRBMap.RBMapIterator,self).insert(RBKeyValue(k,v))
+
   def __init__(self,h=None):
     super(pyRBMap,self).__init__()
     if h is not None: self.extend(h)
@@ -549,6 +575,9 @@ class pyRBMap(pyRBT):
     for k,v in h.items():
       self.insert(k,v)
 
+  def remove(self,item):
+    return super(pyRBMap,self).remove(pyRBMap.RBKeyValue(item)).v
+
   def __setitem__(self,k,v):
     self.insert(k,v)
 
@@ -561,9 +590,6 @@ class pyRBMap(pyRBT):
 
   def __contains__(self,item):
     return self.find(pyRBMap.RBKeyValue(item)) is not None
-
-  def remove(self,item):
-    return super(pyRBMap,self).remove(pyRBMap.RBKeyValue(item))
 
   def __delitem__(self,k):
     self.remove(k)
@@ -579,9 +605,8 @@ class pyRBMap(pyRBT):
       yield v
 
   # Generator for (key,value) pairs
-  def keyvalues(self,reverse=False):
-    for x in pyRBT.RBIterator(self,reverse,False):
-      yield (x.k,x.v)
+  def keyvalues(self,reversed=False):
+    return pyRBMap.RBMapIterator(self,reversed)
 
-  def __iter__(self): return self.keyvalues()
-  def __reversed__(self): return self.keyvalues(True)
+  def __iter__(self): return pyRBMap.RBMapIterator(self)
+  def __reversed__(self): return pyRBMap.RBMapIterator(self,True)
