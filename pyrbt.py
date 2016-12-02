@@ -148,16 +148,23 @@ class pyRBT(object):
   def __getitem__(self,key):
     if isinstance(key, slice):
       return [ self.get(i) for i in range(*key.indices(len(self))) ]
-    if isinstance(key, int):
+    elif isinstance(key, int):
       return self.get(key)
-    raise TypeError("Invalid argument type.")
+    else:
+      raise TypeError("Invalid argument type.")
 
   # setitem not defined since we don't map from key -> value
   # def __setitem__(self,key,value):
 
   # override the del operation to delete a value by index
-  def __delitem__(self,i):
-    self.pop(i)
+  def __delitem__(self,key):
+    if isinstance(key, slice):
+      # work backwards deleting items
+      for i in reversed(range(*key.indices(len(self)))): self.pop(i)
+    elif isinstance(key, int):
+      self.pop(key)
+    else:
+      raise TypeError("Invalid argument type.")
 
   def __contains__(self,item):
     return self.find(item) is not None

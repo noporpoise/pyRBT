@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# coding=utf-8
 from __future__ import print_function
 from pyrbt import pyRBT,pyRBMap
 import random
@@ -119,6 +120,8 @@ def _test_delete():
   t.extend([4, 8, 9, 3, 6]) # 3,4,6,8,9
   t.remove(4)
   assert list(t) == [3,6,8,9]
+  t.insert(4)
+  assert list(t) == [3,4,6,8,9]
 
 def _test_itr_delete():
   print("Testing iterator delete...")
@@ -209,8 +212,22 @@ def _test_map():
   assert list(n.keys()) == [2,4,5] and list(n.values()) == ['daisy','woof','words']
   assert list(m.keys()) == [2,4,5] and list(m.values()) == ['daisy','woof','words']
 
+def _test_del():
+  t = pyRBT()
+  t.extend([1,2,3,4,5])
+  assert list(t) == [1,2,3,4,5]
+  del(t[1:3])
+  assert list(t) == [1,4,5]
+  del(t[2])
+  assert list(t) == [1,4]
+  del(t[0])
+  assert list(t) == [4]
+  del(t[0])
+  assert list(t) == []
+
 def main():
   print("Testing RBT")
+  _test_del()
   _test_splice()
   _test_hash()
   _test_delete()
@@ -267,7 +284,7 @@ def main():
     tree.check()
   _test_rbt_comparison()
   _test_rbt_index()
-  print("Looks like the tests all passed.")
+  print("Looks like the tests all passed. ✓")
 
 if __name__ == '__main__':
   main()
