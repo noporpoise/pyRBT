@@ -56,12 +56,18 @@ class pyRBT(object):
       col = "B" if self.black else "R"
       return "("+self.l.treestr()+","+str(self.value)+":"+col+pa+","+self.r.treestr()+")"
     def path(self):
+      """ Returns a generator that iterates up the tree starting with `node` """
       node = self
       while node is not None:
         yield node
+        # assert node.parent is not node
         node = node.parent
 
   class RBTIterator(object):
+    """
+    Iterator over nodes in order. Supports forwards and backwards iteration,
+    insertion into and deletion from the tree. Returns nodes, not their values.
+    """
     __slots__ = ('tree','fwd','node','nxt')
     def __init__(self,tree,reverse=False,nxt=None):
       # if node==None goto nxt, if node==None and nxt==None -> end of iteration
@@ -136,8 +142,8 @@ class pyRBT(object):
   def __reversed__(self):
     return pyRBT.RBTValIterator(self,True)
 
-  # Iterator that returns each node in order
   def nodes(self,reverse=False):
+    """ Iterator that returns each node in order """
     return pyRBT.RBTIterator(self,reverse)
 
   # Get a string representation of the tree
@@ -170,6 +176,7 @@ class pyRBT(object):
     return self.find(item) is not None
 
   def clear(self):
+    """ Reset the tree to an empty tree. """
     self.root = pyRBT.RBLeaf(None)
 
   def __hash__(self):
@@ -184,7 +191,7 @@ class pyRBT(object):
   def __cmp__(x,y):
     if len(x) != len(y): return len(x) - len(y)
     for (a,b) in zip(x,y):
-      if a != b: return a-b
+      if a != b: return -1 if a < b else 1
     return 0
 
   def __gt__(x,y): return x.__cmp__(y)  > 0
@@ -212,56 +219,68 @@ class pyRBT(object):
     if pa is None: return None
     return pa.r if pa.l == node else pa.l
 
-  # Replace child `ch` with `newch` in parent node `pa`
-  def _replace_node(self,pa,ch,newch):
+  def _replace_child_node(self,pa,ch,newch):
+    """
+    Replace child `ch` with `newch` in parent node `pa` and
+    update parent of `newch`
+    """
     if pa is None: self.root = newch
     elif pa.l is ch: pa.l = newch
-    else: pa.r = newch
+    elif pa.r is ch: pa.r = newch
+    else: raise Exception("No such child")
     newch.parent = pa
 
-  # Swap two RBNodes
-  def _swap_nodes(self,a,b):
-    a.black,b.black = b.black,a.black
-    a.value,b.value = b.value,a.value
+  def _swap_nodes(self, a, b):
+    """ Swap the positions of two nodes in the tree """
+    a.l,a.r,b.l,b.r, = b.l,b.r,a.l,a.r
+    a.parent,b.parent = b.parent,a.parent
+    # Keep size and black/red state with positions in tree
     a.size,b.size = b.size,a.size
-    apa,bpa = a.parent,b.parent
-    self._replace_node(apa,a,b)
-    self._replace_node(bpa,b,a)
-    a.l,b.l = b.l,a.l
-    a.r,b.r = b.r,a.r
+    a.black,b.black = b.black,a.black
+    # Remove self loops if nodes connected
+    if a.parent is a: a.parent = b
+    if b.parent is b: b.parent = a
+    # register nodes with new parents (also resolves self-loops in children)
+    self._replace_child_node(b.parent,a,b)
+    self._replace_child_node(a.parent,b,a)
+    # # register nodes with new children
     a.l.parent = a.r.parent = a
     b.l.parent = b.r.parent = b
 
-  #
-  #   pa    ->    ch
-  #  /  \        /  \
-  # 1   ch      pa   3
-  #    /  \    /  \
-  #   2    3  1    2
-  # pass pa node, returns ch node (new parent)
   def _rotate_left(self,node):
+    """
+    Rotate node.right child into parent position, and parent into old left pos.
+      pa    ->    ch
+      /  \        /  \
+     1   ch      pa   3
+        /  \    /  \
+       2    3  1    2
+    pass pa node, returns ch node (new parent)
+    """
     pa, ch = node, node.r
     pa.r, ch.l = ch.l, pa
     ch.parent, pa.parent, pa.r.parent = pa.parent, ch, pa
     pa.size = len(pa.l) + 1 + len(pa.r)
     ch.size = len(ch.l) + 1 + len(ch.r)
-    self._replace_node(ch.parent, pa, ch)
+    self._replace_child_node(ch.parent, pa, ch)
     return ch
 
-  #
-  #       pa    ->   ch
-  #      /  \       /  \
-  #     ch   3     1   pa
-  #    /  \           /  \
-  #   1    2         2    3
-  # pass pa node, returns ch node (new parent)
   def _rotate_right(self,node):
+    """
+    Rotate node.left child into parent position, and parent into old right pos.
+         pa    ->   ch
+        /  \       /  \
+       ch   3     1   pa
+      /  \           /  \
+     1    2         2    3
+    pass pa node, returns ch node (new parent)
+    """
     pa,ch = node,node.l
     pa.l, ch.r = ch.r, pa
     ch.parent, pa.parent, pa.l.parent = pa.parent, ch, pa
     pa.size = len(pa.l) + 1 + len(pa.r)
     ch.size = len(ch.l) + 1 + len(ch.r)
-    self._replace_node(ch.parent, pa, ch)
+    self._replace_child_node(ch.parent, pa, ch)
     return ch
 
   def _insert_case1(self,node):
@@ -308,8 +327,11 @@ class pyRBT(object):
     if node == pa.l: self._rotate_right(gp)
     else: self._rotate_left(gp)
 
-  # multiset = True allows multiple insertions of the same value
   def insert(self,item,multiset=False):
+    """
+    Add an item into the tree.
+    :multiset True allows multiple insertions of the same value
+    """
     if len(self) == 0: newv = self.root = pyRBT.RBNode(item)
     else:
       # Add new node as a leaf node, then balance tree
@@ -334,42 +356,47 @@ class pyRBT(object):
     return newv.value
 
   def extend(self,l,multiset=False):
+    """ Insert all the items form list l. """
     for x in l: self.insert(x,multiset)
 
-  # remove element from a given index
   def pop(self,i=None):
+    """ Remove and return an element at a given index. """
     if i is None: i = len(self)-1
     node = self.getnode(i)
     return self._delete_node(node)
 
-  # remove a given item
   def remove(self,item):
+    """ remove a given item from the tree """
     node = self.findnode(item)
     if node is None: raise KeyError("RBT key '"+str(item)+"' not found")
     return self._delete_node(node)
 
-  def _delete_node(self,dnode):
-    # Find bottom internal node to swap with
-    node = dnode
-    val = dnode.value
-    # go right since we use the < and >= relations for left/right leaves
-    if not node.r.isleaf():
-      node = node.r
-      while not node.l.isleaf(): node = node.l
-    elif not node.l.isleaf():
+  @staticmethod
+  def _adjacent_node(node):
+    """ Fetch an adjacent node on either the left or right of a node. """
+    if not node.l.isleaf():
+      # adjacent node to the left
       node = node.l
       while not node.r.isleaf(): node = node.r
-    # swap value into node to be deleted
-    if node is not dnode:
-      self._swap_nodes(dnode,node)
-      dnode.value,node.value = node.value,dnode.value
-    for v in dnode.path(): v.size -= 1
-    self._delete_one_child(dnode)
-    return val
+    elif not node.r.isleaf():
+      # adjacent node to the right
+      node = node.r
+      while not node.l.isleaf(): node = node.l
+    return node
 
-  def _delete_one_child(self,node):
+  def _delete_node(self,node):
+    # Find bottom internal node to swap with
+    adjnode = pyRBT._adjacent_node(node)
+    # swap node to the bottom of the tree
+    if adjnode is not node: self._swap_nodes(adjnode,node)
+    for v in node.path(): v.size -= 1
+    self._delete_node_with_one_child(node)
+    return node.value
+
+  def _delete_node_with_one_child(self,node):
+    """ Delete node with at most one child. """
     child = (node.l if node.r.isleaf() else node.r)
-    self._replace_node(node.parent, node, child)
+    self._replace_child_node(node.parent, node, child)
     # may be appending a leaf node, this is OK in deletion
     if node.isblack():
       if child.isred(): child.black = True
@@ -388,12 +415,12 @@ class pyRBT(object):
     self._delete_case3(node)
 
   def _delete_case3(self,node):
-    (pa,nd,sb) = (node.parent,node,pyRBT._sibling(node))
+    (pa,sb) = (node.parent,pyRBT._sibling(node))
     if pa.isblack() and sb.isblack() and sb.l.isblack() and sb.r.isblack():
       sb.black = False
-      self._delete_case2(pa) # parent
+      self._delete_case2(pa)
     else:
-      self._delete_case4(node) # node
+      self._delete_case4(node)
 
   def _delete_case4(self,node):
     (pa,nd,sb) = (node.parent,node,pyRBT._sibling(node))
@@ -429,23 +456,25 @@ class pyRBT(object):
       self._rotate_right(pa)
 
   def find(self,item):
+    """ Find a given item in the tree. Returns None if not found. """
     node = self.findnode(item)
     return node.value if node is not None else None
 
   def findnode(self,item,node=None):
+    """ Find the node holding a given value. Returns None if not found. """
     if node is None: node = self.root
     while not node.isleaf():
       if item == node.value: return node
       node = (node.l if item < node.value else node.r)
     return None
 
-  # fetch via index
-  # index is within `start` if passed
   def get(self,i,start=None):
+    """ Fetch item via index. Index is within `start` if passed """
     node = self.getnode(i,start)
     return node.value
 
   def getnode(self,i,start=None):
+    """ Find the node holding the i-th item. """
     node = self.root if start is None else start
     if i < 0: i += len(node) # allow negative indices
     if i < 0 or i >= len(node):
@@ -458,8 +487,8 @@ class pyRBT(object):
         node = node.r
     raise RuntimeError("Internal pyRBT error")
 
-  # Get the first index of an given value
   def index(self,item,start=None):
+    """ Get the first index of an given value """
     node = self.root if start is None else start
     i = 0
     idx = None
@@ -475,23 +504,23 @@ class pyRBT(object):
     if idx is None: raise KeyError('Key not found: '+str(item))
     return idx
 
-  # Return a tree that is the union of this tree and other
   def union(self,other):
+    """ Return a tree that is the union of this tree and other """
     tree = pyRBT()
     tree.extend(self)
     tree.extend(other)
     return tree
 
-  # Return a tree contain elements from this tree not in other tree
   def diff(self,other):
+    """ Return a tree contain elements from this tree not in other tree """
     tree = pyRBT()
     for x in self:
       if x not in other:
         tree.insert(x)
     return tree
 
-  # Return a tree that is the intersection of this tree and other
   def intersect(self,other):
+    """ Return a tree that is the intersection of this tree and other """
     tree = pyRBT()
     ai,bi = iter(self),iter(other)
     try:
@@ -505,8 +534,8 @@ class pyRBT(object):
     except StopIteration: pass
     return tree
 
-  # Return a tree that contains elements that are only in one of self,other
   def symmetric_diff(self,other):
+    """ Return a tree that contains elements that are only in one of self,other. """
     tree = pyRBT()
     ai,bi = iter(self),iter(other)
     try:
@@ -520,8 +549,8 @@ class pyRBT(object):
     tree.extend(bi)
     return tree
 
-  # Check data structure integrity by checking invariants are met
   def check(self):
+    """ Check data structure integrity by checking invariants are met. """
     assert (len(self) == 0) == self.root.isleaf() # size is zero only if empty
     assert self.root.isblack() # root node is black
     nblack = -1
@@ -543,9 +572,9 @@ class pyRBT(object):
 
 class pyRBMap(pyRBT):
   class RBKeyValue(object):
-    # RBKeyValue compare only the key but also store a value
+    """ RBKeyValue compares only the key but also store a value """
     def __init__(self,k,v=None): self.k,self.v = k,v
-    def __cmp__(x,y): return (x.k>y.k)-(x.k<y.k)
+    def __cmp__(x,y): return -1 if (x.k<y.k) else 1
     def __gt__(x,y): return a.k >  b.k
     def __ge__(x,y): return x.k >= y.k
     def __eq__(x,y): return x.k == y.k
@@ -567,8 +596,8 @@ class pyRBMap(pyRBT):
     super(pyRBMap,self).__init__()
     if h is not None: self.extend(h)
 
-  # order by (key, value) for each element
   def __cmp__(x,y):
+    """ order by (key, value) for each element """
     if len(x) != len(y): return len(x) - len(y)
     for ((ak,av),(bk,bv)) in zip(x,y):
       if ak != bk: return -1 if ak < bk else 1
@@ -599,20 +628,24 @@ class pyRBMap(pyRBT):
     return self.find(pyRBMap.RBKeyValue(item)) is not None
 
   def __delitem__(self,k):
+    """
+    del(h[x]) in pyRBMap is different to del(t[i]) in pyRBT, as in pyRBT we
+    delete the i-th element, here we delete element with (key) value x.
+    """
     self.remove(k)
 
-  # Generator for keys (ordered by key)
   def keys(self,reverse=False):
+    """ Generator for keys (ordered by key) """
     for k,v in self:
       yield k
 
-  # Generator for values (ordered by key)
   def values(self,reverse=False):
+    """ Generator for values (ordered by key) """
     for k,v in self:
       yield v
 
-  # Generator for (key,value) pairs
   def keyvalues(self,reversed=False):
+    """ Generator for (key,value) pairs """
     return pyRBMap.RBMapIterator(self,reversed)
 
   def __iter__(self): return pyRBMap.RBMapIterator(self)
